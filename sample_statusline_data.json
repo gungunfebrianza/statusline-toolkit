@@ -1,0 +1,37 @@
+{
+  "cwd": "/current/working/directory",
+  "session_id": "abc123",
+  "model": {
+    "id": "claude-sonnet-5",
+    "display_name": "Claude Sonnet 5"
+  },
+  "workspace": {
+    "current_dir": "/current/working/directory",
+    "project_dir": "/original/project/directory"
+  },
+  "version": "2.1.90",
+  "cost": {
+    "total_cost_usd": 0.1234,
+    "total_duration_ms": 45000,
+    "total_api_duration_ms": 2300,
+    "total_lines_added": 156,
+    "total_lines_removed": 23
+  },
+  "context_window": {
+    "total_input_tokens": 15500,
+    "total_output_tokens": 1200,
+    "context_window_size": 200000,
+    "used_percentage": 42,
+    "remaining_percentage": 58
+  },
+  "rate_limits": {
+    "five_hour": {
+      "used_percentage": 23.5,
+      "resets_at": 1738425600
+    },
+    "seven_day": {
+      "used_percentage": 41.2,
+      "resets_at": 1738857600
+    }
+  }
+}
