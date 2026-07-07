@@ -1,6 +1,7 @@
 # statusline-toolkit
 
 [![Tests](https://github.com/gungunfebrianza/statusline-toolkit/actions/workflows/test.yml/badge.svg)](https://github.com/gungunfebrianza/statusline-toolkit/actions/workflows/test.yml)
+[![PyPI](https://img.shields.io/pypi/v/statusline-toolkit)](https://pypi.org/project/statusline-toolkit/)
 
 A small, dependency-free Python CLI for Claude Code's [`statusLine`](https://code.claude.com/docs/en/statusline)
 JSON payload. Prints a color-coded one-line summary, with optional currency
@@ -29,23 +30,33 @@ Works identically on **Linux**, **macOS**, and **Windows**. [MIT licensed](LICEN
 
 ## Quick start
 
-Requires Python 3.9+ (`python3` on Linux/macOS, `py` on Windows). Two ways to get it:
+Requires Python 3.9+ (`python3` on Linux/macOS, `py` on Windows). Published
+on [PyPI](https://pypi.org/project/statusline-toolkit/) — pick one:
 
 ```bash
-# Option A: pip/pipx, no clone needed
-pipx install git+https://github.com/gungunfebrianza/statusline-toolkit.git
+# Option A (recommended): pipx — installs the CLI and handles PATH for you
+pipx install statusline-toolkit
 statusline-toolkit --setup
 
-# Option B: clone and run directly — no install step at all
+# Option B: plain pip
+pip install statusline-toolkit
+statusline-toolkit --setup
+
+# Option C: clone and run directly, no install step at all
 git clone https://github.com/gungunfebrianza/statusline-toolkit.git
 cd statusline-toolkit
 python statusline_toolkit.py --input sample_statusline_data.json --idr
 python statusline_toolkit.py --setup
 ```
 
-Both are equivalent — it's zero-dependency either way. The rest of this
-README uses `python statusline_toolkit.py ...`; swap in `statusline-toolkit
-...` if you installed via pip/pipx.
+All three are equivalent — it's zero-dependency either way. The rest of
+this README uses `python statusline_toolkit.py ...`; swap in
+`statusline-toolkit ...` if you installed via pip/pipx.
+
+> **`pip install` warns the script isn't on PATH?** That's a Windows/pip
+> thing when installing outside a virtualenv, not a bug — either use
+> `pipx` instead (handles this automatically), or run it via
+> `python -m statusline_toolkit ...`, which works regardless of PATH.
 
 ## Usage
 
@@ -281,6 +292,16 @@ Linux/macOS terminal apps).
 
 Use the `py` launcher instead (`py statusline_toolkit.py ...`), or
 reinstall Python with "Add python.exe to PATH" checked.
+</details>
+
+<details>
+<summary><strong>"statusline-toolkit.exe is installed in ... which is not on PATH"</strong></summary>
+
+A normal `pip install` warning on Windows when installing outside a
+virtualenv — not a bug. Either reinstall with `pipx install
+statusline-toolkit` (handles PATH for you), or just run
+`python -m statusline_toolkit ...` instead of the bare `statusline-toolkit`
+command; it works regardless of PATH.
 </details>
 
 <details>

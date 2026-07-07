@@ -3,7 +3,9 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.0.0] - 2026-07-07
+
+First release published to [PyPI](https://pypi.org/project/statusline-toolkit/).
 
 ### Added
 - Multi-currency conversion (`--currency CODE`, any ISO 4217 code), replacing
@@ -57,10 +59,13 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   of falling back to the default.
 - `usage_history.json` writes are now atomic (temp file + rename), so a
   reader can never see a partially-written or corrupted file.
+- `pyproject.toml` used the deprecated `license = {file = "LICENSE"}` table
+  form; switched to the SPDX `license = "MIT"` + `license-files` form
+  before setuptools drops support for the old one.
 
-## [1.0.0] - 2026-07-06
+## [0.1.0] - 2026-07-06
 
-Initial version: read a Claude Code statusline JSON payload from stdin or
-a file, print a one-line summary (model, context-window bar, cost), with
-a fixed-rate USD → IDR conversion (`--idr`) and a `--setup` installer for
-`~/.claude/settings.json`.
+Initial commit (never published as a package). Read a Claude Code
+statusline JSON payload from stdin or a file, print a one-line summary
+(model, context-window bar, cost), with a fixed-rate USD → IDR conversion
+(`--idr`) and a `--setup` installer for `~/.claude/settings.json`.
