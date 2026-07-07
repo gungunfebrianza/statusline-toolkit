@@ -1,5 +1,7 @@
 # statusline-toolkit
 
+![Statusline_toolkit](Statusline_toolkit.JPG)
+
 [![Tests](https://github.com/gungunfebrianza/statusline-toolkit/actions/workflows/test.yml/badge.svg)](https://github.com/gungunfebrianza/statusline-toolkit/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/statusline-toolkit)](https://pypi.org/project/statusline-toolkit/)
 
@@ -306,7 +308,6 @@ command; it works regardless of PATH.
 
 <details>
 <summary><strong>`--setup` didn't seem to take effect</strong></summary>
-
 Restart Claude Code — `statusLine` config is only read at session start.
 Check `~/.claude/settings.json` for a `statusLine` block pointing at
 `statusline_toolkit.py`.
