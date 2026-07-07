@@ -243,6 +243,10 @@ python statusline_toolkit.py --input sample_statusline_data.json --track
 python statusline_toolkit.py --stats                 # grouped by day
 python statusline_toolkit.py --stats --by-project     # or by project / --by-model
 python statusline_toolkit.py --dashboard --open       # visual HTML report
+
+# Both also accept the same currency conversion as the summary line
+python statusline_toolkit.py --stats --currency EUR
+python statusline_toolkit.py --dashboard --currency EUR --open
 ```
 
 `--stats` prints a per-group cost/session breakdown with a grand total.
@@ -254,8 +258,12 @@ A couple of details that make the dashboard easier to scan at a glance:
 
 - Two extra summary cards, **Priciest day** and **Cheapest day**, so you
   can spot your worst/best day without reading the whole chart.
-- Today's row in the "Cost by day" chart is visually highlighted with a
-  **Today** badge, so you don't have to hunt for the most recent bar.
+- The "Cost by day" chart visually highlights **today's** row and the
+  **priciest** row with a small badge (both, if it's the same day), so you
+  don't have to hunt for either one.
+- `--currency`/`--idr` (or your [personal defaults](#personal-defaults-file)'
+  saved currency) adds a converted estimate next to every dollar amount, in
+  both `--stats` and `--dashboard` — not just the live summary line.
 
 Everything here is opt-in and local: nothing is tracked or rendered unless
 you ask, and `usage_history.json` is plain JSON you can inspect or delete

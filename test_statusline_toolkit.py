@@ -622,6 +622,24 @@ class BuildStatsReportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             st.build_stats_report({"s1": {"date": "2026-07-05", "cost_usd": 1.0}}, group_by="currency")
 
+    def test_shows_converted_amount_when_currency_given(self):
+        history = {"s1": {"date": "2026-07-05", "cost_usd": 1.0}}
+        report = st.build_stats_report(history, currency="EUR", rate=0.92)
+        self.assertIn(st.format_currency(0.92, "EUR"), report)
+
+    def test_omits_converted_amount_when_no_currency(self):
+        history = {"s1": {"date": "2026-07-05", "cost_usd": 1.0}}
+        report = st.build_stats_report(history)
+        self.assertNotIn("~", report)
+
+
+class ConvertedSuffixTests(unittest.TestCase):
+    def test_empty_string_when_no_currency(self):
+        self.assertEqual(st.converted_suffix(1.0, None, None), "")
+
+    def test_formats_converted_amount(self):
+        self.assertEqual(st.converted_suffix(1.0, "EUR", 0.92), f" (~{st.format_currency(0.92, 'EUR')})")
+
 
 class GroupCostsTests(unittest.TestCase):
     def test_sums_cost_and_counts_sessions_per_key(self):
@@ -672,21 +690,36 @@ class DashboardBarRowsTests(unittest.TestCase):
 
     def test_highlights_matching_row(self):
         html_out = st._dashboard_bar_rows(
-            {"2026-07-06": (1.0, 1), "2026-07-07": (2.0, 1)}, sort_by_value=False, highlight="2026-07-07",
+            {"2026-07-06": (1.0, 1), "2026-07-07": (2.0, 1)},
+            sort_by_value=False,
+            highlights={"2026-07-07": ["Today"]},
         )
-        self.assertIn('bar-row-today', html_out)
-        self.assertIn('today-badge">Today</span>', html_out)
+        self.assertIn("bar-row-highlight", html_out)
+        self.assertIn('highlight-badge">Today</span>', html_out)
         # only the matching row is marked
-        self.assertEqual(html_out.count("bar-row-today"), 1)
+        self.assertEqual(html_out.count("bar-row-highlight"), 1)
 
-    def test_no_highlight_when_highlight_is_none(self):
-        html_out = st._dashboard_bar_rows({"2026-07-07": (1.0, 1)}, sort_by_value=False, highlight=None)
-        self.assertNotIn("bar-row-today", html_out)
-        self.assertNotIn("today-badge", html_out)
+    def test_multiple_badges_on_the_same_row(self):
+        html_out = st._dashboard_bar_rows(
+            {"2026-07-07": (1.0, 1)}, sort_by_value=False, highlights={"2026-07-07": ["Today", "Priciest"]},
+        )
+        self.assertIn('highlight-badge">Today</span>', html_out)
+        self.assertIn('highlight-badge">Priciest</span>', html_out)
+
+    def test_no_highlight_when_highlights_is_none(self):
+        html_out = st._dashboard_bar_rows({"2026-07-07": (1.0, 1)}, sort_by_value=False, highlights=None)
+        self.assertNotIn("bar-row-highlight", html_out)
+        self.assertNotIn("highlight-badge", html_out)
 
     def test_no_highlight_when_no_row_matches(self):
-        html_out = st._dashboard_bar_rows({"2026-07-06": (1.0, 1)}, sort_by_value=False, highlight="2026-07-07")
-        self.assertNotIn("bar-row-today", html_out)
+        html_out = st._dashboard_bar_rows(
+            {"2026-07-06": (1.0, 1)}, sort_by_value=False, highlights={"2026-07-07": ["Today"]},
+        )
+        self.assertNotIn("bar-row-highlight", html_out)
+
+    def test_converted_currency_shown_when_given(self):
+        html_out = st._dashboard_bar_rows({"proj-a": (1.0, 1)}, sort_by_value=True, currency="EUR", rate=0.92)
+        self.assertIn(st.format_currency(0.92, "EUR"), html_out)
 
 
 class ExtremeDayLabelTests(unittest.TestCase):
@@ -761,13 +794,27 @@ class BuildDashboardHtmlTests(unittest.TestCase):
 
     def test_highlights_todays_bar_in_cost_by_day(self):
         today = datetime.date.today().isoformat()
+        # today's cost is deliberately the smallest, so this test isn't conflated with "Priciest"
         history = {
-            "s1": {"date": "2026-01-01", "cost_usd": 1.0},
-            "s2": {"date": today, "cost_usd": 2.0},
+            "s1": {"date": "2026-01-01", "cost_usd": 5.0},
+            "s2": {"date": today, "cost_usd": 0.1},
         }
         page = st.build_dashboard_html(history)
-        self.assertIn("bar-row-today", page)
-        self.assertIn("today-badge", page)
+        self.assertIn("bar-row-highlight", page)
+        self.assertIn('highlight-badge">Today</span>', page)
+
+    def test_highlights_priciest_bar_in_cost_by_day(self):
+        history = {
+            "s1": {"date": "2026-01-01", "cost_usd": 1.0},
+            "s2": {"date": "2026-01-02", "cost_usd": 5.0},
+        }
+        page = st.build_dashboard_html(history)
+        self.assertIn('highlight-badge">Priciest</span>', page)
+
+    def test_converted_currency_in_cards_and_bars(self):
+        history = {"s1": {"date": "2026-07-05", "cost_usd": 1.0, "project": "proj-a"}}
+        page = st.build_dashboard_html(history, currency="EUR", rate=0.92)
+        self.assertIn(st.format_currency(0.92, "EUR"), page)
 
 
 class RecordSessionTests(unittest.TestCase):
@@ -1136,6 +1183,14 @@ class StatsGroupingCliTests(unittest.TestCase):
             output = self._run(["--stats", "--history-file", str(history_file)])
             self.assertIn("by day", output)
 
+    def test_currency_flag_shows_converted_amounts(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            history_file = self._history_file(Path(tmp))
+            output = self._run([
+                "--stats", "--history-file", str(history_file), "--currency", "EUR", "--rate", "0.92",
+            ])
+            self.assertIn(st.format_currency(0.92, "EUR"), output)
+
 
 class DashboardCliTests(unittest.TestCase):
     def _run(self, argv: list[str]) -> str:
@@ -1195,6 +1250,23 @@ class DashboardCliTests(unittest.TestCase):
             with patch("statusline_toolkit.webbrowser.open") as mock_open:
                 self._run(["--dashboard", "--history-file", str(history_file)])
             mock_open.assert_not_called()
+
+    def test_currency_flag_shows_converted_amounts_in_dashboard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            history_file = tmp_path / "usage_history.json"
+            history_file.write_text(json.dumps({"s1": {"date": "2026-07-05", "cost_usd": 1.0}}))
+            dashboard_path = tmp_path / "dash.html"
+
+            self._run([
+                "--dashboard",
+                "--history-file", str(history_file),
+                "--dashboard-file", str(dashboard_path),
+                "--currency", "EUR",
+                "--rate", "0.92",
+            ])
+            content = dashboard_path.read_text(encoding="utf-8")
+            self.assertIn(st.format_currency(0.92, "EUR"), content)
 
 
 if __name__ == "__main__":

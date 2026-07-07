@@ -13,8 +13,18 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   segment's default color if a value is invalid, rather than erroring or
   rendering nothing.
 - `--dashboard`: two new summary cards, **Priciest day** and **Cheapest
-  day**, and today's row in the "Cost by day" chart is now visually
-  highlighted with a **Today** badge.
+  day**, and the "Cost by day" chart now visually highlights both today's
+  row and the priciest row with a badge (both, if it's the same day).
+- `--stats` and `--dashboard` now accept `--currency`/`--idr` (same as the
+  live summary line), showing a converted estimate next to every USD
+  amount in the report/dashboard.
+
+### Changed
+- `_dashboard_bar_rows`'s `highlight` parameter (a single label) became
+  `highlights` (a label → badge-list mapping), so a row can carry more
+  than one badge (e.g. a day that's both "Today" and "Priciest"). The
+  CSS classes `.bar-row-today`/`.today-badge` were renamed to the generic
+  `.bar-row-highlight`/`.highlight-badge` to match.
 
 ## [1.0.0] - 2026-07-07
 

@@ -385,6 +385,13 @@ def format_currency(amount: float, currency_code: str) -> str:
     return f"{symbol}{formatted}" if symbol else f"{currency_code} {formatted}"
 
 
+def converted_suffix(amount_usd: float, currency: str | None, rate: float | None) -> str:
+    """' (~CONVERTED)' if a currency/rate is given, else '' — shared by --stats and --dashboard."""
+    if not currency:
+        return ""
+    return f" (~{format_currency(amount_usd * rate, currency)})"
+
+
 def format_rate(rate: float, currency_code: str) -> str:
     """Format a USD->currency rate for display, e.g. '16,300' or '0.9200'."""
     decimals = 0 if rate >= 100 else 4
@@ -479,12 +486,15 @@ def group_costs(history: dict[str, Any], key: str) -> dict[str, tuple[float, int
     return groups
 
 
-def build_stats_report(history: dict[str, Any], group_by: str = "date") -> str:
+def build_stats_report(
+    history: dict[str, Any], group_by: str = "date", currency: str | None = None, rate: float | None = None
+) -> str:
     """
     Render a cost/session-count breakdown plus a grand total, from --track's recorded sessions.
 
     `group_by` is "date" (the default — a per-day breakdown), "project", or "model" — whichever
     field of the tracked session record to attribute cost to (same values shown in the summary line).
+    Pass `currency`/`rate` (e.g. from --currency/--idr) to also show a converted estimate.
     """
     if group_by not in GROUP_BY_LABELS:
         raise ValueError(f"group_by must be one of {list(GROUP_BY_LABELS)}, got {group_by!r}")
@@ -500,13 +510,15 @@ def build_stats_report(history: dict[str, Any], group_by: str = "date") -> str:
         subtotal, count = groups[key]
         grand_total += subtotal
         grand_sessions += count
-        lines.append(f"  {key.ljust(key_width)}    {format_usd(subtotal)}   ({count} session{plural_suffix(count)})")
+        converted = converted_suffix(subtotal, currency, rate)
+        lines.append(f"  {key.ljust(key_width)}    {format_usd(subtotal)}{converted}   ({count} session{plural_suffix(count)})")
 
     avg = grand_total / grand_sessions if grand_sessions else 0.0
+    grand_converted = converted_suffix(grand_total, currency, rate)
     header = f"Usage history by {GROUP_BY_LABELS[group_by]} ({grand_sessions} session{plural_suffix(grand_sessions)} tracked)"
     footer = (
         f"  {'-' * (key_width + 30)}\n"
-        f"  {'Total'.ljust(key_width)}    {format_usd(grand_total)}   "
+        f"  {'Total'.ljust(key_width)}    {format_usd(grand_total)}{grand_converted}   "
         f"({grand_sessions} session{plural_suffix(grand_sessions)}, avg {format_usd(avg)}/session)"
     )
     return "\n".join([header, *lines, footer])
@@ -539,9 +551,9 @@ h2 { font-size: 1.05rem; margin-bottom: 0.75rem; }
     display: flex; align-items: center; gap: 0.75rem; margin: 0.4rem 0;
     border-radius: 6px; padding: 0.15rem 0.3rem;
 }
-.bar-row-today { background: rgba(99, 99, 241, 0.12); }
+.bar-row-highlight { background: rgba(99, 99, 241, 0.12); }
 @media (prefers-color-scheme: dark) {
-    .bar-row-today { background: rgba(129, 140, 248, 0.2); }
+    .bar-row-highlight { background: rgba(129, 140, 248, 0.2); }
 }
 .bar-label {
     width: 140px; flex-shrink: 0; font-size: 0.85rem; text-align: right;
@@ -550,7 +562,7 @@ h2 { font-size: 1.05rem; margin-bottom: 0.75rem; }
 .bar-track { flex: 1; background: #ececef; border-radius: 4px; height: 18px; overflow: hidden; }
 .bar-fill { background: #6366f1; height: 100%; border-radius: 4px; }
 .bar-value { width: 190px; flex-shrink: 0; font-size: 0.85rem; opacity: 0.85; }
-.today-badge {
+.highlight-badge {
     font-size: 0.7rem; font-weight: 600; background: #6366f1; color: #fff;
     padding: 0.05rem 0.4rem; border-radius: 3px; margin-left: 0.5rem;
 }
@@ -559,16 +571,26 @@ h2 { font-size: 1.05rem; margin-bottom: 0.75rem; }
 """.strip()
 
 
-def _dashboard_bar_rows(groups: dict[str, tuple[float, int]], sort_by_value: bool, highlight: str | None = None) -> str:
+def _dashboard_bar_rows(
+    groups: dict[str, tuple[float, int]],
+    sort_by_value: bool,
+    highlights: dict[str, list[str]] | None = None,
+    currency: str | None = None,
+    rate: float | None = None,
+) -> str:
     """
     Render one HTML bar-chart row per (label, (cost, count)) — the session count sits next to
     the dollar amount so a tall bar's meaning is clear (one expensive session vs. many cheap ones).
     sort_by_value=False sorts alphabetically (for dates); True sorts by cost, highest first.
-    `highlight`, if given, visually marks the row whose label matches it (used for "today").
+
+    `highlights` maps a label to the badge text(s) to show on that row (e.g. {"2026-07-07":
+    ["Today", "Priciest"]} if the same day is both) — a label with no entry gets no badge.
+    `currency`/`rate`, if given, add a converted estimate next to each dollar amount.
     """
     if not groups:
         return '<p class="empty">No data yet.</p>'
 
+    highlights = highlights or {}
     max_cost = max(cost for cost, _ in groups.values()) or 1.0
     items = sorted(groups.items(), key=lambda kv: kv[1][0], reverse=True) if sort_by_value else sorted(groups.items())
 
@@ -576,33 +598,44 @@ def _dashboard_bar_rows(groups: dict[str, tuple[float, int]], sort_by_value: boo
     for label, (cost, count) in items:
         pct = (cost / max_cost) * 100
         safe_label = html.escape(str(label))
-        is_highlighted = highlight is not None and label == highlight
-        row_class = "bar-row bar-row-today" if is_highlighted else "bar-row"
-        badge = '<span class="today-badge">Today</span>' if is_highlighted else ""
+        badges = highlights.get(label, [])
+        row_class = "bar-row bar-row-highlight" if badges else "bar-row"
+        badge_html = "".join(f'<span class="highlight-badge">{html.escape(b)}</span>' for b in badges)
+        converted = html.escape(converted_suffix(cost, currency, rate))
         rows.append(
             f'<div class="{row_class}">'
             f'<div class="bar-label" title="{safe_label}">{safe_label}</div>'
             f'<div class="bar-track"><div class="bar-fill" style="width:{pct:.1f}%"></div></div>'
-            f'<div class="bar-value">{html.escape(format_usd(cost))} &middot; {count} session{plural_suffix(count)}{badge}</div>'
+            f'<div class="bar-value">{html.escape(format_usd(cost))}{converted} &middot; '
+            f'{count} session{plural_suffix(count)}{badge_html}</div>'
             "</div>"
         )
     return "\n".join(rows)
 
 
-def _extreme_day_label(by_date: dict[str, tuple[float, int]], pick_max: bool) -> str | None:
+def _extreme_day_label(
+    by_date: dict[str, tuple[float, int]], pick_max: bool, currency: str | None = None, rate: float | None = None
+) -> str | None:
     """'DATE ($X.XXXX)' for the highest- or lowest-cost day in by_date, or None if there's no data."""
     if not by_date:
         return None
     selector = max if pick_max else min
     date, (cost, _count) = selector(by_date.items(), key=lambda kv: kv[1][0])
-    return f"{html.escape(date)} ({html.escape(format_usd(cost))})"
+    converted = html.escape(converted_suffix(cost, currency, rate))
+    return f"{html.escape(date)} ({html.escape(format_usd(cost))}{converted})"
 
 
-def build_dashboard_html(history: dict[str, Any], generated_at: datetime.datetime | None = None) -> str:
+def build_dashboard_html(
+    history: dict[str, Any],
+    generated_at: datetime.datetime | None = None,
+    currency: str | None = None,
+    rate: float | None = None,
+) -> str:
     """
     Render a self-contained HTML usage dashboard (summary cards + per-day/project/model bar charts).
 
     `generated_at` defaults to now; it's a parameter mainly so tests can pin a fixed timestamp.
+    `currency`/`rate` (e.g. from --currency/--idr) add a converted estimate next to every amount.
     """
     generated_at = generated_at or datetime.datetime.now()
     session_count = len(history)
@@ -610,16 +643,25 @@ def build_dashboard_html(history: dict[str, Any], generated_at: datetime.datetim
     avg_cost = total_cost / session_count if session_count else 0.0
     dates = sorted(record["date"] for record in history.values() if record.get("date"))
     date_range = f"{dates[0]} to {dates[-1]}" if dates else "no sessions yet"
+    total_converted = html.escape(converted_suffix(total_cost, currency, rate))
+    avg_converted = html.escape(converted_suffix(avg_cost, currency, rate))
 
     by_date = group_costs(history, "date")
     today = datetime.date.today().isoformat()
-    priciest_day = _extreme_day_label(by_date, pick_max=True)
-    cheapest_day = _extreme_day_label(by_date, pick_max=False)
+    priciest_day = _extreme_day_label(by_date, pick_max=True, currency=currency, rate=rate)
+    cheapest_day = _extreme_day_label(by_date, pick_max=False, currency=currency, rate=rate)
     extreme_day_cards = ""
     if priciest_day is not None and cheapest_day is not None:
         extreme_day_cards = f"""
   <div class="card"><div class="label">Priciest day</div><div class="value">{priciest_day}</div></div>
   <div class="card"><div class="label">Cheapest day</div><div class="value">{cheapest_day}</div></div>"""
+
+    highlights: dict[str, list[str]] = {}
+    if today in by_date:
+        highlights.setdefault(today, []).append("Today")
+    if by_date:
+        priciest_date = max(by_date.items(), key=lambda kv: kv[1][0])[0]
+        highlights.setdefault(priciest_date, []).append("Priciest")
 
     return f"""<!doctype html>
 <html lang="en">
@@ -634,21 +676,21 @@ def build_dashboard_html(history: dict[str, Any], generated_at: datetime.datetim
 <h1>Usage dashboard</h1>
 <p class="subtitle">{session_count} session{plural_suffix(session_count)} tracked &middot; {html.escape(date_range)}</p>
 <div class="cards">
-  <div class="card"><div class="label">Total spent</div><div class="value">{html.escape(format_usd(total_cost))}</div></div>
+  <div class="card"><div class="label">Total spent</div><div class="value">{html.escape(format_usd(total_cost))}{total_converted}</div></div>
   <div class="card"><div class="label">Sessions</div><div class="value">{session_count}</div></div>
-  <div class="card"><div class="label">Avg / session</div><div class="value">{html.escape(format_usd(avg_cost))}</div></div>{extreme_day_cards}
+  <div class="card"><div class="label">Avg / session</div><div class="value">{html.escape(format_usd(avg_cost))}{avg_converted}</div></div>{extreme_day_cards}
 </div>
 <section>
   <h2>Cost by day</h2>
-  {_dashboard_bar_rows(by_date, sort_by_value=False, highlight=today)}
+  {_dashboard_bar_rows(by_date, sort_by_value=False, highlights=highlights, currency=currency, rate=rate)}
 </section>
 <section>
   <h2>Cost by project</h2>
-  {_dashboard_bar_rows(group_costs(history, "project"), sort_by_value=True)}
+  {_dashboard_bar_rows(group_costs(history, "project"), sort_by_value=True, currency=currency, rate=rate)}
 </section>
 <section>
   <h2>Cost by model</h2>
-  {_dashboard_bar_rows(group_costs(history, "model"), sort_by_value=True)}
+  {_dashboard_bar_rows(group_costs(history, "model"), sort_by_value=True, currency=currency, rate=rate)}
 </section>
 <p class="generated">Generated {html.escape(generated_at.strftime("%Y-%m-%d %H:%M"))}</p>
 </body>
@@ -1154,6 +1196,7 @@ def main(argv: list[str] | None = None) -> None:
     history_file = merged_path(args.history_file, config, "history_file", DEFAULT_HISTORY_FILE)
     plugins_dir = merged_path(args.plugins_dir, config, "plugins_dir", DEFAULT_PLUGINS_DIR)
     segment_colors = merged_colors(config)
+    rate, rate_source = load_rate(currency, args.rate, rate_file) if currency else (None, None)
 
     if args.setup:
         settings_path = Path(args.settings_file) if args.settings_file else default_settings_path()
@@ -1162,12 +1205,13 @@ def main(argv: list[str] | None = None) -> None:
 
     if args.stats:
         group_by = "model" if by_model else ("project" if by_project else "date")
-        print(build_stats_report(read_history(history_file), group_by))
+        print(build_stats_report(read_history(history_file), group_by, currency, rate))
         return
 
     if args.dashboard:
         dashboard_path = Path(args.dashboard_file) if args.dashboard_file else history_file.parent / "usage_dashboard.html"
-        dashboard_path.write_text(build_dashboard_html(read_history(history_file)), encoding="utf-8")
+        dashboard_html = build_dashboard_html(read_history(history_file), currency=currency, rate=rate)
+        dashboard_path.write_text(dashboard_html, encoding="utf-8")
         print(f"Wrote {dashboard_path}")
         if args.open:
             webbrowser.open(dashboard_path.resolve().as_uri())
@@ -1175,7 +1219,6 @@ def main(argv: list[str] | None = None) -> None:
 
     data = read_input(args.input)
     use_color = not no_color and not os.environ.get("NO_COLOR")
-    rate, rate_source = load_rate(currency, args.rate, rate_file) if currency else (None, None)
     max_width = None if no_adapt else (width if width is not None else get_terminal_width())
 
     if track_enabled:
