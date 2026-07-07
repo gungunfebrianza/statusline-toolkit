@@ -148,6 +148,44 @@ class ColorizeFixedTests(unittest.TestCase):
         self.assertEqual(st.colorize_fixed("+156", (46, 204, 64), st.ANSI_GREEN, use_color=False), "+156")
 
 
+class ResolveColorTests(unittest.TestCase):
+    def test_resolves_known_color_name(self):
+        rgb, basic_ansi = st.resolve_color("cyan")
+        self.assertEqual(rgb, (0, 188, 212))
+        self.assertEqual(basic_ansi, "\033[36m")
+
+    def test_color_name_is_case_and_whitespace_insensitive(self):
+        self.assertEqual(st.resolve_color(" Cyan "), st.resolve_color("cyan"))
+
+    def test_resolves_hex_color(self):
+        rgb, basic_ansi = st.resolve_color("#00FF00")
+        self.assertEqual(rgb, (0, 255, 0))
+        self.assertEqual(basic_ansi, "\033[37m")
+
+    def test_returns_none_for_unresolvable_value(self):
+        self.assertIsNone(st.resolve_color("not-a-color"))
+        self.assertIsNone(st.resolve_color("#GGGGGG"))
+        self.assertIsNone(st.resolve_color("#FFF"))
+
+
+class ColorizeNamedTests(unittest.TestCase):
+    def test_uses_truecolor_when_supported(self):
+        with patch("statusline_toolkit.supports_truecolor", return_value=True):
+            result = st.colorize_named("hi", "cyan", use_color=True)
+        self.assertEqual(result, f"\033[38;2;0;188;212mhi{st.ANSI_RESET}")
+
+    def test_falls_back_to_basic_ansi_when_truecolor_unsupported(self):
+        with patch("statusline_toolkit.supports_truecolor", return_value=False):
+            result = st.colorize_named("hi", "cyan", use_color=True)
+        self.assertEqual(result, f"\033[36mhi{st.ANSI_RESET}")
+
+    def test_returns_plain_text_when_color_disabled(self):
+        self.assertEqual(st.colorize_named("hi", "cyan", use_color=False), "hi")
+
+    def test_returns_plain_text_for_unresolvable_color(self):
+        self.assertEqual(st.colorize_named("hi", "not-a-color", use_color=True), "hi")
+
+
 class VisibleLengthTests(unittest.TestCase):
     def test_plain_text_length_unchanged(self):
         self.assertEqual(st.visible_length("hello"), 5)
@@ -322,6 +360,31 @@ class MergedPathTests(unittest.TestCase):
 
     def test_falls_back_to_default_when_config_value_is_not_a_string(self):
         self.assertEqual(st.merged_path(None, {"rate_file": 12345}, "rate_file", Path("default.json")), Path("default.json"))
+
+
+class MergedColorsTests(unittest.TestCase):
+    def test_returns_defaults_when_no_config(self):
+        self.assertEqual(st.merged_colors({}), st.DEFAULT_SEGMENT_COLORS)
+
+    def test_valid_override_replaces_default(self):
+        colors = st.merged_colors({"colors": {"model": "red"}})
+        self.assertEqual(colors["model"], "red")
+        self.assertEqual(colors["project"], st.DEFAULT_SEGMENT_COLORS["project"])  # untouched
+
+    def test_hex_override_is_accepted(self):
+        colors = st.merged_colors({"colors": {"cost": "#00FF00"}})
+        self.assertEqual(colors["cost"], "#00FF00")
+
+    def test_unresolvable_override_keeps_default(self):
+        colors = st.merged_colors({"colors": {"duration": "not-a-color"}})
+        self.assertEqual(colors["duration"], st.DEFAULT_SEGMENT_COLORS["duration"])
+
+    def test_unknown_segment_key_is_ignored(self):
+        colors = st.merged_colors({"colors": {"totally_made_up": "red"}})
+        self.assertEqual(colors, st.DEFAULT_SEGMENT_COLORS)
+
+    def test_non_dict_colors_value_is_ignored(self):
+        self.assertEqual(st.merged_colors({"colors": "not-a-dict"}), st.DEFAULT_SEGMENT_COLORS)
 
 
 class LoadRateTests(unittest.TestCase):
@@ -821,6 +884,37 @@ class PluginDropOrderTests(unittest.TestCase):
         plugins = [("weather", 10, None), ("quiet", 0, None)]
         plugin_parts = {"plugin:weather": "22C"}  # "quiet" returned None and isn't here
         self.assertEqual(st.plugin_drop_order(plugins, plugin_parts), ("plugin:weather",))
+
+
+class SegmentColorIntegrationTests(unittest.TestCase):
+    """Confirms segment_colors actually reach model/project/cost/duration/burn_rate in the real pipeline."""
+
+    def setUp(self):
+        self.data = {
+            "model": {"display_name": "Test Model"},
+            "workspace": {"current_dir": "/home/user/my-project"},
+            "cost": {"total_cost_usd": 1.0, "total_duration_ms": 3_600_000},
+        }
+
+    def test_default_colors_applied(self):
+        with patch("statusline_toolkit.supports_truecolor", return_value=False):
+            parts = st._build_summary_parts(self.data, None, None, use_color=True)
+        self.assertTrue(parts["model"].startswith(f"{st.NAMED_COLORS['cyan'][1]}["))
+        self.assertTrue(parts["project"].startswith(f"{st.NAMED_COLORS['blue'][1]}("))
+        self.assertTrue(parts["cost"].startswith(f"{st.NAMED_COLORS['yellow'][1]}$"))
+        self.assertTrue(parts["duration"].startswith(st.NAMED_COLORS["gray"][1]))
+        self.assertTrue(parts["burn_rate"].startswith(st.NAMED_COLORS["magenta"][1]))
+
+    def test_custom_colors_override_defaults(self):
+        custom = {**st.DEFAULT_SEGMENT_COLORS, "model": "red"}
+        with patch("statusline_toolkit.supports_truecolor", return_value=False):
+            parts = st._build_summary_parts(self.data, None, None, use_color=True, segment_colors=custom)
+        self.assertTrue(parts["model"].startswith(st.NAMED_COLORS["red"][1]))
+
+    def test_no_color_leaves_segments_plain(self):
+        parts = st._build_summary_parts(self.data, None, None, use_color=False)
+        self.assertEqual(parts["model"], "[Test Model]")
+        self.assertEqual(parts["project"], "(my-project)")
 
 
 class PluginIntegrationTests(unittest.TestCase):

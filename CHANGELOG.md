@@ -3,6 +3,16 @@
 All notable changes to this project are documented here. Format loosely
 follows [Keep a Changelog](https://keepachangelog.com/).
 
+## [Unreleased]
+
+### Added
+- Customizable colors for the model, project, cost, burn-rate, and duration
+  segments (`colors` object in the personal defaults file — see the
+  README's "Customizing colors" section). Accepts either a color name
+  (`red`, `blue`, `orange`, ...) or a `#RRGGBB` hex code; falls back to the
+  segment's default color if a value is invalid, rather than erroring or
+  rendering nothing.
+
 ## [1.0.0] - 2026-07-07
 
 First release published to [PyPI](https://pypi.org/project/statusline-toolkit/).

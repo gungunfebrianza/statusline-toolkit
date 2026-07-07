@@ -27,6 +27,7 @@ run one setup command, and you're done.
 | | |
 |---|---|
 | 🎨 **Color-coded summary** | A one-line status bar that turns green→amber→red as your context fills up, so you see problems before they happen. |
+| 🌈 **Fully customizable colors** | Model, project, cost, burn rate, and duration each have their own color — pick your own in one config file. |
 | 💱 **Any currency** | Show cost in EUR, JPY, IDR, or any world currency — not just USD. |
 | 📊 **Cost tracking + dashboard** | Optionally log what every session costs, then see it as a report *or* a visual HTML chart. |
 | 📏 **Never overflows** | Automatically shrinks to fit narrow terminals instead of wrapping or cutting off. |
@@ -40,6 +41,7 @@ run one setup command, and you're done.
 - [🚀 Quick start](#quick-start)
 - [🛠️ Usage](#usage)
 - [📖 Reading the summary line](#reading-the-summary-line)
+- [🌈 Customizing colors](#customizing-colors)
 - [🖥️ Installing as your Claude Code status line](#installing-as-your-claude-code-status-line)
 - [💱 Currency conversion](#currency-conversion)
 - [📊 Cost tracking: history, stats, and a dashboard](#cost-tracking-history-stats-and-a-dashboard)
@@ -138,22 +140,24 @@ Run `--help` any time for the same reference from the source.
 [Claude Sonnet 5] (my-project) [####------] 42% | $0.1234 (~Rp 2.011) | +156/-23 | 45s | $9.87/hr | 5h: 24% 7d: 41%
 ```
 
-| Segment | Meaning |
-|---|---|
-| `[Claude Sonnet 5]` | 🤖 Model name. |
-| `(my-project)` | 📂 Current project folder — helps tell sessions apart. |
-| `[####------] 42%` | 🎯 Context window used, color-coded green→amber→red. |
-| `$0.1234 (~Rp 2.011)` | 💵 USD cost, plus a converted estimate if `--currency`/`--idr` is passed. |
-| `+156/-23` | ➕➖ Lines added/removed, colored git-style (green/red). |
-| `45s` | ⏱️ Session duration. |
-| `$9.87/hr` | 🔥 **Burn rate** — cost extrapolated to an hourly pace (a derived number, not a raw field). |
-| `5h: 24% 7d: 41%` | 📈 5-hour / 7-day rate-limit usage. |
+| Segment | Meaning | Default color |
+|---|---|---|
+| `[Claude Sonnet 5]` | 🤖 Model name. | 🔵 cyan |
+| `(my-project)` | 📂 Current project folder — helps tell sessions apart. | 🔵 blue |
+| `[####------] 42%` | 🎯 Context window used, color-coded green→amber→red. | gradient |
+| `$0.1234 (~Rp 2.011)` | 💵 USD cost, plus a converted estimate if `--currency`/`--idr` is passed. | 🟡 yellow |
+| `+156/-23` | ➕➖ Lines added/removed, colored git-style (green/red). | 🟢/🔴 fixed |
+| `45s` | ⏱️ Session duration. | ⚪ gray |
+| `$9.87/hr` | 🔥 **Burn rate** — cost extrapolated to an hourly pace (a derived number, not a raw field). | 🟣 magenta |
+| `5h: 24% 7d: 41%` | 📈 5-hour / 7-day rate-limit usage. | gradient |
 
 Any segment just disappears if the payload doesn't have that data — nothing errors.
 
-**Colors** blend smoothly from green (low) to amber to red (high) on
-terminals with 24-bit color support, and fall back to plain green/yellow/red
-otherwise. `--no-color` or `NO_COLOR=1` turns all of it off.
+**Colors** blend smoothly from green (low) to amber to red (high) on the
+usage bars, and every other segment above gets its own solid color, on
+terminals with 24-bit color support — falling back to plain basic-ANSI
+colors otherwise. `--no-color` or `NO_COLOR=1` turns all of it off. Want
+different colors? See [🌈 Customizing colors](#customizing-colors).
 
 **Adaptive width:** if the full line wouldn't fit your terminal, the least
 essential segments drop first — rate limits, then burn rate, duration,
@@ -162,6 +166,38 @@ lines, project, currency — until it fits, or down to just
 the width explicitly (handy since Claude Code runs this headless, so
 there's often nothing real to detect) or `--no-adapt` to always print the
 full line.
+
+## 🌈 Customizing colors
+
+Five segments — **model**, **project**, **cost**, **burn rate**, and
+**duration** — each have their own solid color, and you can change any of
+them without touching any code. Add a `colors` object to your
+[personal defaults file](#personal-defaults-file) (`~/.claude/statusline-toolkit.json`):
+
+```json
+{
+  "colors": {
+    "model": "orange",
+    "project": "purple",
+    "cost": "#00FF7F",
+    "burn_rate": "red",
+    "duration": "white"
+  }
+}
+```
+
+Every key is optional — only set the ones you want to change; anything you
+leave out keeps its default. You can use either:
+
+- **A color name**: `black`, `red`, `green`, `yellow`, `blue`, `magenta`,
+  `cyan`, `white`, `gray`/`grey`, `orange`, or `purple`.
+- **A hex code**: e.g. `"#FF8800"`, for exact color matching on terminals
+  with 24-bit color support (falls back to plain white otherwise).
+
+If a value is misspelled or invalid, that one segment quietly keeps its
+default color instead of breaking — nothing ever errors because of a typo
+in your color config. `--no-color`/`NO_COLOR` disables custom colors the
+same way it disables everything else.
 
 ## 🖥️ Installing as your Claude Code status line
 
@@ -236,6 +272,10 @@ Every key is optional and mirrors a CLI flag (`no_color`, `by_project`,
 `no_plugins` are all supported too). **CLI flags always override the
 file.** Use `--config PATH` for a different file (e.g. separate
 personal/work profiles).
+
+There's one config-only setting with no matching flag: `colors`, for
+[customizing the summary line's colors](#customizing-colors) — see that
+section for the full list of options.
 
 ## 🧩 Plugin segments
 

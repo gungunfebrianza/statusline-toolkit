@@ -71,8 +71,18 @@ PLUGIN_DEFAULT_PRIORITY = 0  # lower drops sooner under width pressure; see disc
 # else in that file is ignored rather than rejected, so it stays forward-compatible.
 CONFIG_KEYS = (
     "currency", "no_color", "track", "by_project", "by_model", "no_adapt", "width",
-    "rate_file", "history_file", "plugins_dir", "no_plugins",
+    "rate_file", "history_file", "plugins_dir", "no_plugins", "colors",
 )
+
+# Segments with a fixed (non-gradient) customizable color. Override any of these via the
+# "colors" object in your personal defaults file, e.g. {"colors": {"model": "#00AFFF"}}.
+DEFAULT_SEGMENT_COLORS = {
+    "model": "cyan",
+    "project": "blue",
+    "cost": "yellow",
+    "burn_rate": "magenta",
+    "duration": "gray",
+}
 
 # Only IDR ships with a bundled fallback (this toolkit's original currency);
 # every other currency must come from exchange_rate.json or --rate.
@@ -159,6 +169,60 @@ def colorize_fixed(text: str, rgb: tuple[int, int, int], basic_ansi: str, use_co
     """Like colorize, but for a fixed semantic color (e.g. git-style +/-) rather than a percentage gradient."""
     if not use_color:
         return text
+    if supports_truecolor():
+        r, g, b = rgb
+        color = f"\033[38;2;{r};{g};{b}m"
+    else:
+        color = basic_ansi
+    return f"{color}{text}{ANSI_RESET}"
+
+
+# User-customizable segment colors: a name from this table, or a "#RRGGBB" hex string (only
+# usable with truecolor; falls back to plain white on basic-ANSI terminals). Names cover the
+# basic 8-color ANSI palette plus a couple of friendly extras (orange/purple) that fall back
+# to their nearest basic-ANSI equivalent.
+NAMED_COLORS: dict[str, tuple[tuple[int, int, int], str]] = {
+    "black": ((60, 60, 60), "\033[30m"),
+    "red": ((220, 53, 69), "\033[31m"),
+    "green": ((46, 204, 64), "\033[32m"),
+    "yellow": ((255, 193, 7), "\033[33m"),
+    "blue": ((66, 135, 245), "\033[34m"),
+    "magenta": ((191, 90, 242), "\033[35m"),
+    "cyan": ((0, 188, 212), "\033[36m"),
+    "white": ((230, 230, 230), "\033[37m"),
+    "gray": ((140, 140, 140), "\033[90m"),
+    "grey": ((140, 140, 140), "\033[90m"),
+    "orange": ((255, 140, 0), "\033[33m"),
+    "purple": ((160, 90, 210), "\033[35m"),
+}
+
+HEX_COLOR_RE = re.compile(r"^#([0-9a-fA-F]{6})$")
+
+
+def resolve_color(value: str) -> tuple[tuple[int, int, int], str] | None:
+    """
+    Resolve a color name (see NAMED_COLORS) or a "#RRGGBB" hex string to (rgb, basic_ansi_fallback).
+    Returns None if `value` is neither — callers should treat that as "leave it uncolored."
+    """
+    named = NAMED_COLORS.get(value.strip().lower())
+    if named is not None:
+        return named
+    match = HEX_COLOR_RE.match(value.strip())
+    if match:
+        hex_digits = match.group(1)
+        rgb = (int(hex_digits[0:2], 16), int(hex_digits[2:4], 16), int(hex_digits[4:6], 16))
+        return rgb, "\033[37m"  # arbitrary hex has no natural basic-ANSI equivalent; fall back to white
+    return None
+
+
+def colorize_named(text: str, color_value: str, use_color: bool) -> str:
+    """Colorize `text` with a user-configured color name/hex (see resolve_color); invalid values render plain."""
+    if not use_color:
+        return text
+    resolved = resolve_color(color_value)
+    if resolved is None:
+        return text
+    rgb, basic_ansi = resolved
     if supports_truecolor():
         r, g, b = rgb
         color = f"\033[38;2;{r};{g};{b}m"
@@ -603,6 +667,22 @@ def merged_path(cli_value: str | None, config: dict[str, Any], key: str, default
     return Path(config_value) if isinstance(config_value, str) else Path(default)
 
 
+def merged_colors(config: dict[str, Any]) -> dict[str, str]:
+    """
+    DEFAULT_SEGMENT_COLORS, with any valid overrides from the personal defaults file's "colors"
+    object layered on top. An override is ignored (keeping the default) if its key isn't a
+    known segment or its value isn't a resolvable color name/hex — a typo should never mean
+    "render this segment with no color at all."
+    """
+    colors = dict(DEFAULT_SEGMENT_COLORS)
+    overrides = config.get("colors")
+    if isinstance(overrides, dict):
+        for key, value in overrides.items():
+            if key in colors and isinstance(value, str) and resolve_color(value) is not None:
+                colors[key] = value
+    return colors
+
+
 def build_statusline_command(script_path: Path, currency: str | None = None, track: bool = False) -> str:
     """
     Build the settings.json "command" string that runs this script as a statusLine.
@@ -765,7 +845,11 @@ def plugin_drop_order(plugins: list[tuple[str, int, Any]], plugin_parts: dict[st
 
 
 def _build_summary_parts(
-    data: dict[str, Any], currency: str | None, rate: float | None, use_color: bool
+    data: dict[str, Any],
+    currency: str | None,
+    rate: float | None,
+    use_color: bool,
+    segment_colors: dict[str, str] = DEFAULT_SEGMENT_COLORS,
 ) -> dict[str, str]:
     """Build each summary-line segment (already colored/formatted), keyed by name for _assemble_summary_line."""
     model = get_field(data, "model.display_name") or "unknown model"
@@ -778,18 +862,20 @@ def _build_summary_parts(
     lines_removed = get_field(data, "cost.total_lines_removed")
     duration_ms = get_field(data, "cost.total_duration_ms")
 
-    parts: dict[str, str] = {"model": f"[{model}]"}
+    parts: dict[str, str] = {"model": colorize_named(f"[{model}]", segment_colors["model"], use_color)}
 
     if isinstance(project_dir, str) and project_dir:
-        parts["project"] = f"({project_dir_name(project_dir)})"
+        project_text = f"({project_dir_name(project_dir)})"
+        parts["project"] = colorize_named(project_text, segment_colors["project"], use_color)
 
     if isinstance(used_pct, (int, float)):
         parts["bar"] = f"{build_bar(used_pct, use_color=use_color)} {colorize(f'{used_pct:.0f}%', used_pct, use_color)}"
 
     if isinstance(cost, (int, float)):
-        parts["cost"] = format_usd(cost)
+        parts["cost"] = colorize_named(format_usd(cost), segment_colors["cost"], use_color)
         if currency:
-            parts["currency"] = f"(~{format_currency(cost * rate, currency)})"
+            converted_text = f"(~{format_currency(cost * rate, currency)})"
+            parts["currency"] = colorize_named(converted_text, segment_colors["cost"], use_color)
 
     if isinstance(lines_added, (int, float)) or isinstance(lines_removed, (int, float)):
         added = int(lines_added) if isinstance(lines_added, (int, float)) else 0
@@ -799,9 +885,10 @@ def _build_summary_parts(
         parts["lines"] = f"{added_text}/{removed_text}"
 
     if isinstance(duration_ms, (int, float)):
-        parts["duration"] = format_duration(duration_ms)
+        parts["duration"] = colorize_named(format_duration(duration_ms), segment_colors["duration"], use_color)
         if isinstance(cost, (int, float)) and duration_ms > 0:
-            parts["burn_rate"] = format_burn_rate(cost, duration_ms)
+            burn_text = format_burn_rate(cost, duration_ms)
+            parts["burn_rate"] = colorize_named(burn_text, segment_colors["burn_rate"], use_color)
 
     limit_parts = []
     if isinstance(five_hour, (int, float)):
@@ -868,8 +955,9 @@ def print_summary(
     use_color: bool = True,
     max_width: int | None = None,
     plugins: list[tuple[str, int, Any]] | None = None,
+    segment_colors: dict[str, str] = DEFAULT_SEGMENT_COLORS,
 ) -> None:
-    parts = _build_summary_parts(data, currency, rate, use_color)
+    parts = _build_summary_parts(data, currency, rate, use_color, segment_colors)
     drop_order = ADAPTIVE_DROP_ORDER
 
     if plugins:
@@ -1030,6 +1118,7 @@ def main(argv: list[str] | None = None) -> None:
     rate_file = merged_path(args.rate_file, config, "rate_file", DEFAULT_RATE_FILE)
     history_file = merged_path(args.history_file, config, "history_file", DEFAULT_HISTORY_FILE)
     plugins_dir = merged_path(args.plugins_dir, config, "plugins_dir", DEFAULT_PLUGINS_DIR)
+    segment_colors = merged_colors(config)
 
     if args.setup:
         settings_path = Path(args.settings_file) if args.settings_file else default_settings_path()
@@ -1065,7 +1154,7 @@ def main(argv: list[str] | None = None) -> None:
         print_fields(data, args.field, currency, rate, rate_source)
     else:
         plugins = [] if no_plugins else discover_plugins(plugins_dir)
-        print_summary(data, currency, rate, rate_source, use_color, max_width, plugins)
+        print_summary(data, currency, rate, rate_source, use_color, max_width, plugins, segment_colors)
 
     if currency and args.rate is None:
         warning = rate_staleness_warning(rate_file)
