@@ -1,39 +1,59 @@
-# statusline-toolkit
+# 🧰 statusline-toolkit
 
 ![Statusline_toolkit](Statusline_toolkit.JPG)
 
 [![Tests](https://github.com/gungunfebrianza/statusline-toolkit/actions/workflows/test.yml/badge.svg)](https://github.com/gungunfebrianza/statusline-toolkit/actions/workflows/test.yml)
 [![PyPI](https://img.shields.io/pypi/v/statusline-toolkit)](https://pypi.org/project/statusline-toolkit/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-A small, dependency-free Python CLI for Claude Code's [`statusLine`](https://code.claude.com/docs/en/statusline)
-JSON payload. Prints a color-coded one-line summary, with optional currency
-conversion, cost tracking, and an HTML dashboard — all local, all plain
-JSON files you own.
+**New to this project? Start here.** [Claude Code](https://claude.com/product/claude-code)
+is an AI coding assistant that runs in your terminal. It has a "status line" —
+a small strip of text at the bottom of the screen — that can show whatever a
+script tells it to. **statusline-toolkit *is* that script.** It turns the raw
+data Claude Code hands it into a friendly, color-coded line showing your
+model, cost, and usage — plus optional cost tracking, currency conversion,
+and a visual dashboard. No coding knowledge needed to use it: install it,
+run one setup command, and you're done.
 
 ```
 [Claude Sonnet 5] (my-project) [####------] 42% | $0.1234 (~Rp 2.011) | +156/-23 | 45s | $9.87/hr | 5h: 24% 7d: 41%
 ```
+*(That line above is what you'll see — model name, context used, cost, and more, all in one glance.)*
 
-Works identically on **Linux**, **macOS**, and **Windows**. [MIT licensed](LICENSE).
+🐧 Linux · 🍎 macOS · 🪟 Windows — works the same everywhere. [MIT licensed](LICENSE).
 
-## Contents
+## ✨ Features
 
-- [Quick start](#quick-start)
-- [Usage](#usage)
-- [Reading the summary line](#reading-the-summary-line)
-- [Installing as your Claude Code status line](#installing-as-your-claude-code-status-line)
-- [Currency conversion](#currency-conversion)
-- [Cost tracking: history, stats, and a dashboard](#cost-tracking-history-stats-and-a-dashboard)
-- [Personal defaults file](#personal-defaults-file)
-- [Plugin segments](#plugin-segments)
-- [Project layout](#project-layout)
-- [Tests](#tests)
-- [Troubleshooting](#troubleshooting)
+| | |
+|---|---|
+| 🎨 **Color-coded summary** | A one-line status bar that turns green→amber→red as your context fills up, so you see problems before they happen. |
+| 💱 **Any currency** | Show cost in EUR, JPY, IDR, or any world currency — not just USD. |
+| 📊 **Cost tracking + dashboard** | Optionally log what every session costs, then see it as a report *or* a visual HTML chart. |
+| 📏 **Never overflows** | Automatically shrinks to fit narrow terminals instead of wrapping or cutting off. |
+| ⚙️ **Set it and forget it** | Save your preferred settings once; no more retyping the same flags. |
+| 🧩 **Extensible** | Add your own custom info (like your git branch) with a tiny plugin file. |
+| 🔒 **100% local & private** | No network calls, no accounts, no telemetry — everything lives in plain JSON files you control. |
+| 🪶 **Zero dependencies** | Pure Python standard library. Nothing to `pip install` just to try it. |
 
-## Quick start
+## 📚 Contents
 
-Requires Python 3.9+ (`python3` on Linux/macOS, `py` on Windows). Published
-on [PyPI](https://pypi.org/project/statusline-toolkit/) — pick one:
+- [🚀 Quick start](#quick-start)
+- [🛠️ Usage](#usage)
+- [📖 Reading the summary line](#reading-the-summary-line)
+- [🖥️ Installing as your Claude Code status line](#installing-as-your-claude-code-status-line)
+- [💱 Currency conversion](#currency-conversion)
+- [📊 Cost tracking: history, stats, and a dashboard](#cost-tracking-history-stats-and-a-dashboard)
+- [⚙️ Personal defaults file](#personal-defaults-file)
+- [🧩 Plugin segments](#plugin-segments)
+- [📁 Project layout](#project-layout)
+- [🧪 Tests](#tests)
+- [❓ Troubleshooting](#troubleshooting)
+
+## 🚀 Quick start
+
+Requires Python 3.9+ (`python3` on Linux/macOS, `py` on Windows — most
+computers already have this). Published on
+[PyPI](https://pypi.org/project/statusline-toolkit/) — pick one option:
 
 ```bash
 # Option A (recommended): pipx — installs the CLI and handles PATH for you
@@ -51,16 +71,19 @@ python statusline_toolkit.py --input sample_statusline_data.json --idr
 python statusline_toolkit.py --setup
 ```
 
-All three are equivalent — it's zero-dependency either way. The rest of
-this README uses `python statusline_toolkit.py ...`; swap in
+That single `--setup` command is all most people need — it wires this
+tool into Claude Code automatically. Restart Claude Code and you're done.
+
+All three install options are equivalent and zero-dependency either way.
+The rest of this README uses `python statusline_toolkit.py ...`; swap in
 `statusline-toolkit ...` if you installed via pip/pipx.
 
-> **`pip install` warns the script isn't on PATH?** That's a Windows/pip
-> thing when installing outside a virtualenv, not a bug — either use
-> `pipx` instead (handles this automatically), or run it via
-> `python -m statusline_toolkit ...`, which works regardless of PATH.
+> 💡 **`pip install` warns the script isn't on PATH?** That's a normal
+> Windows/pip thing, not a bug — either use `pipx` instead (handles this
+> automatically), or run it via `python -m statusline_toolkit ...`, which
+> works regardless of PATH.
 
-## Usage
+## 🛠️ Usage
 
 ```bash
 # Live: pipe whatever JSON Claude Code sends on stdin
@@ -71,7 +94,7 @@ python statusline_toolkit.py --input sample_statusline_data.json --all   # full 
 python statusline_toolkit.py --input sample_statusline_data.json --list # just the field names
 python statusline_toolkit.py --input sample_statusline_data.json --field cost.total_cost_usd
 
-# Currency conversion (any ISO 4217 code)
+# Currency conversion (any ISO 4217 code — the 3-letter codes like EUR, JPY, IDR)
 python statusline_toolkit.py --input sample_statusline_data.json --currency EUR
 
 # No colors (for logging, or a terminal that mangles ANSI)
@@ -109,7 +132,7 @@ python statusline_toolkit.py --input sample_statusline_data.json --no-color
 
 Run `--help` any time for the same reference from the source.
 
-## Reading the summary line
+## 📖 Reading the summary line
 
 ```
 [Claude Sonnet 5] (my-project) [####------] 42% | $0.1234 (~Rp 2.011) | +156/-23 | 45s | $9.87/hr | 5h: 24% 7d: 41%
@@ -117,14 +140,14 @@ Run `--help` any time for the same reference from the source.
 
 | Segment | Meaning |
 |---|---|
-| `[Claude Sonnet 5]` | Model name. |
-| `(my-project)` | Current project folder — helps tell sessions apart. |
-| `[####------] 42%` | Context window used, color-coded green→amber→red. |
-| `$0.1234 (~Rp 2.011)` | USD cost, plus a converted estimate if `--currency`/`--idr` is passed. |
-| `+156/-23` | Lines added/removed, colored git-style (green/red). |
-| `45s` | Session duration. |
-| `$9.87/hr` | **Burn rate** — cost extrapolated to an hourly pace (a derived number, not a raw field). |
-| `5h: 24% 7d: 41%` | 5-hour / 7-day rate-limit usage. |
+| `[Claude Sonnet 5]` | 🤖 Model name. |
+| `(my-project)` | 📂 Current project folder — helps tell sessions apart. |
+| `[####------] 42%` | 🎯 Context window used, color-coded green→amber→red. |
+| `$0.1234 (~Rp 2.011)` | 💵 USD cost, plus a converted estimate if `--currency`/`--idr` is passed. |
+| `+156/-23` | ➕➖ Lines added/removed, colored git-style (green/red). |
+| `45s` | ⏱️ Session duration. |
+| `$9.87/hr` | 🔥 **Burn rate** — cost extrapolated to an hourly pace (a derived number, not a raw field). |
+| `5h: 24% 7d: 41%` | 📈 5-hour / 7-day rate-limit usage. |
 
 Any segment just disappears if the payload doesn't have that data — nothing errors.
 
@@ -140,7 +163,7 @@ the width explicitly (handy since Claude Code runs this headless, so
 there's often nothing real to detect) or `--no-adapt` to always print the
 full line.
 
-## Installing as your Claude Code status line
+## 🖥️ Installing as your Claude Code status line
 
 ```bash
 python statusline_toolkit.py --setup                       # default: IDR
@@ -154,7 +177,7 @@ idempotent (safe to re-run) and asks before overwriting a different
 `statusLine` (skip with `-y`). Restart Claude Code afterward to see it
 take effect.
 
-## Currency conversion
+## 💱 Currency conversion
 
 `exchange_rate.json` holds manually maintained rates you control — no
 network calls, no API keys:
@@ -174,7 +197,7 @@ old, you'll get a one-line reminder to refresh it.
 
 (Older single-currency files — `{"usd_to_idr": 16300, ...}` — still work unchanged.)
 
-## Cost tracking: history, stats, and a dashboard
+## 📊 Cost tracking: history, stats, and a dashboard
 
 `--track` records each session's cost to `usage_history.json` (keyed by
 session, so re-renders don't double-count). Then:
@@ -195,7 +218,7 @@ Everything here is opt-in and local: nothing is tracked or rendered unless
 you ask, and `usage_history.json` is plain JSON you can inspect or delete
 anytime.
 
-## Personal defaults file
+## ⚙️ Personal defaults file
 
 Tired of retyping the same flags? Put them in
 `~/.claude/statusline-toolkit.json`:
@@ -214,7 +237,7 @@ Every key is optional and mirrors a CLI flag (`no_color`, `by_project`,
 file.** Use `--config PATH` for a different file (e.g. separate
 personal/work profiles).
 
-## Plugin segments
+## 🧩 Plugin segments
 
 Add your own segment (git branch, whatever) without touching the script:
 drop a `.py` file into `~/.claude/statusline-plugins/` defining one function.
@@ -241,13 +264,13 @@ among plugins — but plugin segments always drop before any built-in one.
 skipped, never crashes the statusline.** Disable loading with
 `--no-plugins`, or point elsewhere with `--plugins-dir`.
 
-> **Security note:** a plugin is a regular Python file that runs with full
-> permissions on every render — there's no sandboxing. Only put plugins in
-> this folder that you wrote yourself or fully trust, the same way you'd
-> treat any script before running it. Never copy a plugin from an untrusted
-> source without reading it first.
+> ⚠️ **Security note:** a plugin is a regular Python file that runs with
+> full permissions on every render — there's no sandboxing. Only put
+> plugins in this folder that you wrote yourself or fully trust, the same
+> way you'd treat any script before running it. Never copy a plugin from
+> an untrusted source without reading it first.
 
-## Project layout
+## 📁 Project layout
 
 | File | Purpose |
 |---|---|
@@ -264,7 +287,7 @@ skipped, never crashes the statusline.** Disable loading with
 `~/.claude/statusline-toolkit.json` are all generated on demand — not
 part of a fresh checkout, safe to delete anytime.
 
-## Tests
+## 🧪 Tests
 
 ```bash
 python -m unittest test_statusline_toolkit.py -v
@@ -272,7 +295,7 @@ python -m unittest test_statusline_toolkit.py -v
 
 Standard library `unittest` only — no test runner to install.
 
-## Troubleshooting
+## ❓ Troubleshooting
 
 <details>
 <summary><strong>"No input JSON received" / "Input is not valid JSON"</strong></summary>
@@ -308,6 +331,7 @@ command; it works regardless of PATH.
 
 <details>
 <summary><strong>`--setup` didn't seem to take effect</strong></summary>
+
 Restart Claude Code — `statusLine` config is only read at session start.
 Check `~/.claude/settings.json` for a `statusLine` block pointing at
 `statusline_toolkit.py`.
