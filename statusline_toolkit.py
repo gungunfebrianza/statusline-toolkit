@@ -532,9 +532,17 @@ h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
 }
 .card .label { font-size: 0.8rem; opacity: 0.7; }
 .card .value { font-size: 1.6rem; font-weight: 600; }
+.card .sub { font-size: 0.75rem; opacity: 0.6; margin-top: 0.2rem; }
 section { margin-bottom: 2.5rem; }
 h2 { font-size: 1.05rem; margin-bottom: 0.75rem; }
-.bar-row { display: flex; align-items: center; gap: 0.75rem; margin: 0.4rem 0; }
+.bar-row {
+    display: flex; align-items: center; gap: 0.75rem; margin: 0.4rem 0;
+    border-radius: 6px; padding: 0.15rem 0.3rem;
+}
+.bar-row-today { background: rgba(99, 99, 241, 0.12); }
+@media (prefers-color-scheme: dark) {
+    .bar-row-today { background: rgba(129, 140, 248, 0.2); }
+}
 .bar-label {
     width: 140px; flex-shrink: 0; font-size: 0.85rem; text-align: right;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -542,16 +550,21 @@ h2 { font-size: 1.05rem; margin-bottom: 0.75rem; }
 .bar-track { flex: 1; background: #ececef; border-radius: 4px; height: 18px; overflow: hidden; }
 .bar-fill { background: #6366f1; height: 100%; border-radius: 4px; }
 .bar-value { width: 190px; flex-shrink: 0; font-size: 0.85rem; opacity: 0.85; }
+.today-badge {
+    font-size: 0.7rem; font-weight: 600; background: #6366f1; color: #fff;
+    padding: 0.05rem 0.4rem; border-radius: 3px; margin-left: 0.5rem;
+}
 .empty { opacity: 0.6; font-style: italic; }
 .generated { opacity: 0.5; font-size: 0.8rem; margin-top: 2rem; }
 """.strip()
 
 
-def _dashboard_bar_rows(groups: dict[str, tuple[float, int]], sort_by_value: bool) -> str:
+def _dashboard_bar_rows(groups: dict[str, tuple[float, int]], sort_by_value: bool, highlight: str | None = None) -> str:
     """
     Render one HTML bar-chart row per (label, (cost, count)) — the session count sits next to
     the dollar amount so a tall bar's meaning is clear (one expensive session vs. many cheap ones).
     sort_by_value=False sorts alphabetically (for dates); True sorts by cost, highest first.
+    `highlight`, if given, visually marks the row whose label matches it (used for "today").
     """
     if not groups:
         return '<p class="empty">No data yet.</p>'
@@ -563,14 +576,26 @@ def _dashboard_bar_rows(groups: dict[str, tuple[float, int]], sort_by_value: boo
     for label, (cost, count) in items:
         pct = (cost / max_cost) * 100
         safe_label = html.escape(str(label))
+        is_highlighted = highlight is not None and label == highlight
+        row_class = "bar-row bar-row-today" if is_highlighted else "bar-row"
+        badge = '<span class="today-badge">Today</span>' if is_highlighted else ""
         rows.append(
-            '<div class="bar-row">'
+            f'<div class="{row_class}">'
             f'<div class="bar-label" title="{safe_label}">{safe_label}</div>'
             f'<div class="bar-track"><div class="bar-fill" style="width:{pct:.1f}%"></div></div>'
-            f'<div class="bar-value">{html.escape(format_usd(cost))} &middot; {count} session{plural_suffix(count)}</div>'
+            f'<div class="bar-value">{html.escape(format_usd(cost))} &middot; {count} session{plural_suffix(count)}{badge}</div>'
             "</div>"
         )
     return "\n".join(rows)
+
+
+def _extreme_day_label(by_date: dict[str, tuple[float, int]], pick_max: bool) -> str | None:
+    """'DATE ($X.XXXX)' for the highest- or lowest-cost day in by_date, or None if there's no data."""
+    if not by_date:
+        return None
+    selector = max if pick_max else min
+    date, (cost, _count) = selector(by_date.items(), key=lambda kv: kv[1][0])
+    return f"{html.escape(date)} ({html.escape(format_usd(cost))})"
 
 
 def build_dashboard_html(history: dict[str, Any], generated_at: datetime.datetime | None = None) -> str:
@@ -585,6 +610,16 @@ def build_dashboard_html(history: dict[str, Any], generated_at: datetime.datetim
     avg_cost = total_cost / session_count if session_count else 0.0
     dates = sorted(record["date"] for record in history.values() if record.get("date"))
     date_range = f"{dates[0]} to {dates[-1]}" if dates else "no sessions yet"
+
+    by_date = group_costs(history, "date")
+    today = datetime.date.today().isoformat()
+    priciest_day = _extreme_day_label(by_date, pick_max=True)
+    cheapest_day = _extreme_day_label(by_date, pick_max=False)
+    extreme_day_cards = ""
+    if priciest_day is not None and cheapest_day is not None:
+        extreme_day_cards = f"""
+  <div class="card"><div class="label">Priciest day</div><div class="value">{priciest_day}</div></div>
+  <div class="card"><div class="label">Cheapest day</div><div class="value">{cheapest_day}</div></div>"""
 
     return f"""<!doctype html>
 <html lang="en">
@@ -601,11 +636,11 @@ def build_dashboard_html(history: dict[str, Any], generated_at: datetime.datetim
 <div class="cards">
   <div class="card"><div class="label">Total spent</div><div class="value">{html.escape(format_usd(total_cost))}</div></div>
   <div class="card"><div class="label">Sessions</div><div class="value">{session_count}</div></div>
-  <div class="card"><div class="label">Avg / session</div><div class="value">{html.escape(format_usd(avg_cost))}</div></div>
+  <div class="card"><div class="label">Avg / session</div><div class="value">{html.escape(format_usd(avg_cost))}</div></div>{extreme_day_cards}
 </div>
 <section>
   <h2>Cost by day</h2>
-  {_dashboard_bar_rows(group_costs(history, "date"), sort_by_value=False)}
+  {_dashboard_bar_rows(by_date, sort_by_value=False, highlight=today)}
 </section>
 <section>
   <h2>Cost by project</h2>

@@ -12,6 +12,9 @@ follows [Keep a Changelog](https://keepachangelog.com/).
   (`red`, `blue`, `orange`, ...) or a `#RRGGBB` hex code; falls back to the
   segment's default color if a value is invalid, rather than erroring or
   rendering nothing.
+- `--dashboard`: two new summary cards, **Priciest day** and **Cheapest
+  day**, and today's row in the "Cost by day" chart is now visually
+  highlighted with a **Today** badge.
 
 ## [1.0.0] - 2026-07-07
 

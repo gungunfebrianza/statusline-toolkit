@@ -250,6 +250,13 @@ python statusline_toolkit.py --dashboard --open       # visual HTML report
 cards plus cost-by-day/project/model bar charts, no JS framework, no CDN,
 light/dark aware — and only opens a browser if you pass `--open`.
 
+A couple of details that make the dashboard easier to scan at a glance:
+
+- Two extra summary cards, **Priciest day** and **Cheapest day**, so you
+  can spot your worst/best day without reading the whole chart.
+- Today's row in the "Cost by day" chart is visually highlighted with a
+  **Today** badge, so you don't have to hunt for the most recent bar.
+
 Everything here is opt-in and local: nothing is tracked or rendered unless
 you ask, and `usage_history.json` is plain JSON you can inspect or delete
 anytime.

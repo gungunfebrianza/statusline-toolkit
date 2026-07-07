@@ -670,6 +670,47 @@ class DashboardBarRowsTests(unittest.TestCase):
         self.assertIn("1 session", html_out)
         self.assertNotIn("1 sessions", html_out)
 
+    def test_highlights_matching_row(self):
+        html_out = st._dashboard_bar_rows(
+            {"2026-07-06": (1.0, 1), "2026-07-07": (2.0, 1)}, sort_by_value=False, highlight="2026-07-07",
+        )
+        self.assertIn('bar-row-today', html_out)
+        self.assertIn('today-badge">Today</span>', html_out)
+        # only the matching row is marked
+        self.assertEqual(html_out.count("bar-row-today"), 1)
+
+    def test_no_highlight_when_highlight_is_none(self):
+        html_out = st._dashboard_bar_rows({"2026-07-07": (1.0, 1)}, sort_by_value=False, highlight=None)
+        self.assertNotIn("bar-row-today", html_out)
+        self.assertNotIn("today-badge", html_out)
+
+    def test_no_highlight_when_no_row_matches(self):
+        html_out = st._dashboard_bar_rows({"2026-07-06": (1.0, 1)}, sort_by_value=False, highlight="2026-07-07")
+        self.assertNotIn("bar-row-today", html_out)
+
+
+class ExtremeDayLabelTests(unittest.TestCase):
+    def test_returns_none_for_empty_input(self):
+        self.assertIsNone(st._extreme_day_label({}, pick_max=True))
+
+    def test_picks_highest_cost_day(self):
+        by_date = {"2026-07-05": (1.2, 1), "2026-07-06": (4.87, 1)}
+        label = st._extreme_day_label(by_date, pick_max=True)
+        self.assertIn("2026-07-06", label)
+        self.assertIn(st.format_usd(4.87), label)
+
+    def test_picks_lowest_cost_day(self):
+        by_date = {"2026-07-05": (1.2, 1), "2026-07-06": (4.87, 1)}
+        label = st._extreme_day_label(by_date, pick_max=False)
+        self.assertIn("2026-07-05", label)
+        self.assertIn(st.format_usd(1.2), label)
+
+    def test_escapes_unsafe_date_label(self):
+        by_date = {"<script>": (1.0, 1)}
+        label = st._extreme_day_label(by_date, pick_max=True)
+        self.assertNotIn("<script>", label)
+        self.assertIn("&lt;script&gt;", label)
+
 
 class BuildDashboardHtmlTests(unittest.TestCase):
     def test_includes_summary_cards(self):
@@ -701,6 +742,32 @@ class BuildDashboardHtmlTests(unittest.TestCase):
         page = st.build_dashboard_html({})
         self.assertIn("Generated", page)
         self.assertIn(str(datetime.date.today().year), page)
+
+    def test_includes_priciest_and_cheapest_day_cards(self):
+        history = {
+            "s1": {"date": "2026-07-05", "cost_usd": 1.2},
+            "s2": {"date": "2026-07-06", "cost_usd": 4.87},
+        }
+        page = st.build_dashboard_html(history)
+        self.assertIn("Priciest day", page)
+        self.assertIn("Cheapest day", page)
+        self.assertIn("2026-07-06", page)  # priciest
+        self.assertIn("2026-07-05", page)  # cheapest
+
+    def test_omits_extreme_day_cards_when_history_empty(self):
+        page = st.build_dashboard_html({})
+        self.assertNotIn("Priciest day", page)
+        self.assertNotIn("Cheapest day", page)
+
+    def test_highlights_todays_bar_in_cost_by_day(self):
+        today = datetime.date.today().isoformat()
+        history = {
+            "s1": {"date": "2026-01-01", "cost_usd": 1.0},
+            "s2": {"date": today, "cost_usd": 2.0},
+        }
+        page = st.build_dashboard_html(history)
+        self.assertIn("bar-row-today", page)
+        self.assertIn("today-badge", page)
 
 
 class RecordSessionTests(unittest.TestCase):
